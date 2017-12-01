@@ -1,0 +1,224 @@
+<html>
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.19.3/moment.min.js" integrity="sha256-/As5lS2upX/fOCO/h/5wzruGngVW3xPs3N8LN4FkA5Q=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.1/Chart.min.js" integrity="sha256-c0m8xzX5oOBawsnLVpHnU2ieISOvxi584aNElFl2W6M=" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/4.6.2/firebase.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha256-k2WSCIexGzOj3Euiig+TlR8gA0EmPjuc79OEeY5L45g=" crossorigin="anonymous"></script>
+  <!--<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">-->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ" crossorigin="anonymous">
+  <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+
+
+  <style>
+    body {
+      color: #73879C;
+    }
+    .panel { font-size: 6rem; display: inline }
+    .panel .current {min-width: 320px; display: inline-block}
+    .panel .legend { font-size: 26px; }
+    .panel .text-muted { color: #73879C }
+    .container {
+      background-color: #F7F7F7;
+    }
+    .chart-container {
+      background-color: white;
+      position: relative;
+      margin: auto;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-inverse bg-inverse">
+  <a class="navbar-brand" href="">Car Count</a>
+</nav>
+<div class="container body">
+
+  <div class="row">
+    <div class="col-sm-12">
+      <div class="panel">
+        <i class="fa fa-car fa-1x text-muted"></i> <span class="current">-</span> <span class="legend text-muted">cars/hour</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart"></canvas>
+      </div>
+
+      <h4 class="text-center mt-4"><a target="_blank" href="https://www.youtube.com/watch?v=ES3J0qyB9nc">VIDEO</a></h4>
+    </div>
+  </div>
+
+</div>
+
+
+
+<script>
+  // Initialize Firebase
+  var config = {
+    apiKey: "AIzaSyBRu7iW-LNBYcYztWbATrUGYdvsymxhZqo",
+    authDomain: "car-count.firebaseapp.com",
+    databaseURL: "https://car-count.firebaseio.com",
+    projectId: "car-count",
+    storageBucket: "",
+    messagingSenderId: "504596238588"
+  };
+  firebase.initializeApp(config);
+
+  var chartDone = false;
+  var nowPoints = [];
+  yesterdayPoints = [];
+  var offset = 0;
+  var panel = $('.panel');
+  var currentSpeed = $('.panel').find('.current');
+
+  function drawChart(){
+    var ts = new Date().getTime();
+    var ctx = document.getElementById("chart");
+    window.chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: 'Cars per hour',
+          lineTension: 0,
+          data: nowPoints,
+          backgroundColor: 'rgba(151,187,205,0.5)',
+          borderColor: 'rgba(151,187,205,1)',
+          borderWidth: 1
+        },
+        {
+          label: 'Cars per hour day ago',
+          lineTension: 0,
+          data: yesterdayPoints,
+          borderWidth: 1
+        }
+        ]
+      },
+      options: {
+        tooltips:{
+          callbacks: {
+            title: function(tooltipItems, data) {
+              if (1 == tooltipItems[0].datasetIndex) {
+                return new Date(new Date(tooltipItems[0].xLabel).getTime() - 3600000*24).toString();
+              } else {
+                return tooltipItems[0].xLabel;
+              }
+            }
+          }
+        },
+        scales: {
+          yAxes: [{
+            ticks: {
+              beginAtZero:true
+            }
+          }],
+          xAxes: [{
+            ticks: {
+              source: 'auto'
+            },
+            type: 'time',
+            time: {
+              min: moment(ts - 7200000),
+              max: moment(ts),
+//              unit: 'hour',
+              displayFormats: {
+                second: 'HH:mm',
+                minute: 'HH:mm',
+                hour: 'HH:mm'
+              }
+            }
+          }]
+        }
+      }
+    });
+  }
+
+  function updatePanel(lastPoint) {
+    var t1 = lastPoint.t.getTime();
+    var t2 = lastPoint.t.getTime() + 3600000;
+    var now = new Date().getTime() + offset;
+    var current;
+    if (now > t2){
+      currentSpeed.html(0);
+    } else {
+      var val = (t2 - now)/3600000 * lastPoint.y;
+      currentSpeed.html(Math.round(val*1000)/1000);
+    }
+  }
+
+  function toChartData(point){
+    return {
+      t: new Date(point.time * 1000),
+      y: point.speed
+    }
+  }
+
+  function pushToCharts(point){
+    nowPoints.push(toChartData(point));
+    var d = toChartData(point);
+    d.t = new Date(d.t.getTime() + 3600000 * 24)
+    yesterdayPoints.push(d)
+  }
+
+  function finalPoint(point){
+    var t2 = point.time * 1000 + 3600000;
+    var now = new Date().getTime() + offset;
+    return {
+      t: new Date(t2),
+      y: 0,
+      final: true
+    };
+  }
+
+  function updateTime(){
+    var ts = new Date().getTime();
+    chart.options.scales.xAxes[0].time.min = moment(ts - 7200000);
+    chart.options.scales.xAxes[0].time.max = moment(ts);
+    updatePanel(nowPoints[nowPoints.length -2])
+  }
+
+  function setTimer(){
+    setInterval(function(){
+      console.log('time')
+      updateTime();
+      chart.update();
+    }, 1000)
+  }
+
+  function setDataSource(){
+    var time =  (new Date().getTime())/1000 - 3600*30;
+    var starCountRef = firebase.database().ref('cars');
+    var query = starCountRef.orderByChild("time").startAt(time);
+    query.once('value', function(snapshot) {
+      console.log('once')
+      var lastpoint;
+      snapshot.forEach(function(point) {
+        pushToCharts(point.val());
+        lastpoint = point.val();
+      });
+      if (lastpoint) {
+        nowPoints.push(finalPoint(lastpoint));
+        updatePanel(toChartData(lastpoint));
+      }
+      chartDone = true;
+      drawChart();
+      setTimer();
+    });
+    query.on('child_added', function(snapshot){
+      console.log('child_added')
+      if (chartDone){
+        nowPoints.pop();
+        nowPoints.push(toChartData(snapshot.val()));
+        nowPoints.push(finalPoint(snapshot.val()));
+        updateTime();
+        chart.update();
+      }
+    });
+  }
+
+  var offsetRef = firebase.database().ref(".info/serverTimeOffset");
+  offsetRef.on("value", function(snap) {
+    offset = snap.val();
+    setDataSource();
+  });
+</script>
+</body>
+</html>
